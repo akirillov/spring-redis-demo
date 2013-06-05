@@ -15,10 +15,6 @@
  */
 package org.springframework.data.redis.samples.retwisj.web;
 
-import javax.servlet.http.Cookie;
-import javax.servlet.http.HttpServletRequest;
-import javax.servlet.http.HttpServletResponse;
-
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.data.redis.samples.retwisj.Post;
 import org.springframework.data.redis.samples.retwisj.Range;
@@ -27,11 +23,11 @@ import org.springframework.data.redis.samples.retwisj.redis.RetwisRepository;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
 import org.springframework.util.StringUtils;
-import org.springframework.web.bind.annotation.ExceptionHandler;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RequestMethod;
-import org.springframework.web.bind.annotation.RequestParam;
+import org.springframework.web.bind.annotation.*;
+
+import javax.servlet.http.Cookie;
+import javax.servlet.http.HttpServletRequest;
+import javax.servlet.http.HttpServletResponse;
 
 /**
  * Annotation-driven controller for Retwis.
@@ -42,11 +38,11 @@ import org.springframework.web.bind.annotation.RequestParam;
 public class RetwisController {
 
 	@Autowired
-	private final RetwisRepository retwis;
+	private final RetwisRepository retwisRepository;
 
 	@Autowired
-	public RetwisController(RetwisRepository twitter) {
-		this.retwis = twitter;
+	public RetwisController(RetwisRepository retwisRepository) {
+		this.retwisRepository = retwisRepository;
 	}
 
 	@RequestMapping("/")
@@ -59,7 +55,7 @@ public class RetwisController {
 
 	@RequestMapping("/signUp")
 	public String signUp(String name, String pass, String pass2, Model model, HttpServletResponse response) {
-		if (retwis.isUserValid(name)) {
+		if (retwisRepository.isUserValid(name)) {
 			model.addAttribute("errorduplicateuser", Boolean.TRUE);
 			return "signin";
 		}
@@ -69,7 +65,7 @@ public class RetwisController {
 			return "signin";
 		}
 
-		String auth = retwis.addUser(name, pass);
+		String auth = retwisRepository.addUser(name, pass);
 		addAuthCookie(auth, name, response);
 
 		return "redirect:/!" + name;
@@ -78,8 +74,8 @@ public class RetwisController {
 	@RequestMapping("/signIn")
 	public String signIn(@RequestParam(required = false) String name, @RequestParam(required = false) String pass, Model model, HttpServletResponse response) {
 		// add tracing cookie
-		if (retwis.auth(name, pass)) {
-			addAuthCookie(retwis.addAuth(name), name, response);
+		if (retwisRepository.auth(name, pass)) {
+			addAuthCookie(retwisRepository.addAuth(name), name, response);
 			return "redirect:/!" + name;
 		}
 		else if (StringUtils.hasText(name) || StringUtils.hasText(pass)) {
@@ -90,7 +86,7 @@ public class RetwisController {
 	}
 
 	private void addAuthCookie(String auth, String name, HttpServletResponse response) {
-		RetwisSecurity.setUser(name, retwis.findUid(name));
+		RetwisSecurity.setUser(name, retwisRepository.findUid(name));
 
 		Cookie cookie = new Cookie(CookieInterceptor.RETWIS_COOKIE, auth);
 		cookie.setComment("Retwis-J demo");
@@ -102,30 +98,30 @@ public class RetwisController {
 	@RequestMapping(value = "/!{name}", method = RequestMethod.GET)
 	public String posts(@PathVariable String name, @RequestParam(required = false) String replyto, @RequestParam(required = false) String replypid, @RequestParam(required = false) Integer page, Model model) {
 		checkUser(name);
-		String targetUid = retwis.findUid(name);
+		String targetUid = retwisRepository.findUid(name);
 		model.addAttribute("post", new Post());
 		model.addAttribute("name", name);
-		model.addAttribute("followers", retwis.getFollowers(targetUid));
-		model.addAttribute("following", retwis.getFollowing(targetUid));
+		model.addAttribute("followers", retwisRepository.getFollowers(targetUid));
+		model.addAttribute("following", retwisRepository.getFollowing(targetUid));
 
 		if (RetwisSecurity.isSignedIn()) {
 			model.addAttribute("replyTo", replyto);
 			model.addAttribute("replyPid", replypid);
 
 			if (!targetUid.equals(RetwisSecurity.getUid())) {
-				model.addAttribute("also_followed", retwis.alsoFollowed(RetwisSecurity.getUid(), targetUid));
-				model.addAttribute("common_followers", retwis.commonFollowers(RetwisSecurity.getUid(), targetUid));
-				model.addAttribute("follows", retwis.isFollowing(RetwisSecurity.getUid(), targetUid));
+				model.addAttribute("also_followed", retwisRepository.alsoFollowed(RetwisSecurity.getUid(), targetUid));
+				model.addAttribute("common_followers", retwisRepository.commonFollowers(RetwisSecurity.getUid(), targetUid));
+				model.addAttribute("follows", retwisRepository.isFollowing(RetwisSecurity.getUid(), targetUid));
 			}
 		}
 		// sanitize page attribute
 		page = (page != null ? Math.abs(page) : 1);
 		model.addAttribute("page", page + 1);
 		Range range = new Range(page);
-		model.addAttribute("moreposts", (RetwisSecurity.isUserSignedIn(targetUid) ? retwis.hasMoreTimeline(targetUid,
-				range) : retwis.hasMorePosts(targetUid, range)));
-		model.addAttribute("posts", (RetwisSecurity.isUserSignedIn(targetUid) ? retwis.getTimeline(targetUid, range)
-				: retwis.getPosts(targetUid, range)));
+		model.addAttribute("moreposts", (RetwisSecurity.isUserSignedIn(targetUid) ? retwisRepository.hasMoreTimeline(targetUid,
+				range) : retwisRepository.hasMorePosts(targetUid, range)));
+		model.addAttribute("posts", (RetwisSecurity.isUserSignedIn(targetUid) ? retwisRepository.getTimeline(targetUid, range)
+				: retwisRepository.getPosts(targetUid, range)));
 
 		return "home";
 	}
@@ -133,21 +129,21 @@ public class RetwisController {
 	@RequestMapping(value = "/!{name}", method = RequestMethod.POST)
 	public String posts(@PathVariable String name, WebPost post, Model model, HttpServletRequest request) {
 		checkUser(name);
-		retwis.post(name, post);
+		retwisRepository.post(name, post);
 		return "redirect:/!" + name;
 	}
 
 	@RequestMapping("/!{name}/follow")
 	public String follow(@PathVariable String name) {
 		checkUser(name);
-		retwis.follow(name);
+		retwisRepository.follow(name);
 		return "redirect:/!" + name;
 	}
 
 	@RequestMapping("/!{name}/stopfollowing")
 	public String stopFollowing(@PathVariable String name) {
 		checkUser(name);
-		retwis.stopFollowing(name);
+		retwisRepository.stopFollowing(name);
 		return "redirect:/!" + name;
 	}
 
@@ -155,16 +151,16 @@ public class RetwisController {
 	public String mentions(@PathVariable String name, Model model) {
 		checkUser(name);
 		model.addAttribute("name", name);
-		String targetUid = retwis.findUid(name);
+		String targetUid = retwisRepository.findUid(name);
 
-		model.addAttribute("posts", retwis.getMentions(targetUid, new Range()));
-		model.addAttribute("followers", retwis.getFollowers(targetUid));
-		model.addAttribute("following", retwis.getFollowing(targetUid));
+		model.addAttribute("posts", retwisRepository.getMentions(targetUid, new Range()));
+		model.addAttribute("followers", retwisRepository.getFollowers(targetUid));
+		model.addAttribute("following", retwisRepository.getFollowing(targetUid));
 
 		if (RetwisSecurity.isSignedIn() && !targetUid.equals(RetwisSecurity.getUid())) {
-			model.addAttribute("also_followed", retwis.alsoFollowed(RetwisSecurity.getUid(), targetUid));
-			model.addAttribute("common_followers", retwis.commonFollowers(RetwisSecurity.getUid(), targetUid));
-			model.addAttribute("follows", retwis.isFollowing(RetwisSecurity.getUid(), targetUid));
+			model.addAttribute("also_followed", retwisRepository.alsoFollowed(RetwisSecurity.getUid(), targetUid));
+			model.addAttribute("common_followers", retwisRepository.commonFollowers(RetwisSecurity.getUid(), targetUid));
+			model.addAttribute("follows", retwisRepository.isFollowing(RetwisSecurity.getUid(), targetUid));
 		}
 
 		return "mentions";
@@ -176,9 +172,9 @@ public class RetwisController {
 		page = (page != null ? Math.abs(page) : 1);
 		model.addAttribute("page", page + 1);
 		Range range = new Range(page);
-		model.addAttribute("moreposts", retwis.hasMoreTimeline(range));
-		model.addAttribute("posts", retwis.timeline(range));
-		model.addAttribute("users", retwis.newUsers(new Range()));
+		model.addAttribute("moreposts", retwisRepository.hasMoreTimeline(range));
+		model.addAttribute("posts", retwisRepository.timeline(range));
+		model.addAttribute("users", retwisRepository.newUsers(new Range()));
 		return "timeline";
 	}
 
@@ -186,25 +182,25 @@ public class RetwisController {
 	public String logout() {
 		String user = RetwisSecurity.getName();
 		// invalidate auth
-		retwis.deleteAuth(user);
+		retwisRepository.deleteAuth(user);
 		return "redirect:/";
 	}
 
 	@RequestMapping("/status")
 	public String status(String pid, Model model) {
 		checkPost(pid);
-		model.addAttribute("posts", retwis.getPost(pid));
+		model.addAttribute("posts", retwisRepository.getPost(pid));
 		return "status";
 	}
 
 	private void checkUser(String username) {
-		if (!retwis.isUserValid(username)) {
+		if (!retwisRepository.isUserValid(username)) {
 			throw new NoSuchDataException(username, true);
 		}
 	}
 
 	private void checkPost(String pid) {
-		if (!retwis.isPostValid(pid)) {
+		if (!retwisRepository.isPostValid(pid)) {
 			throw new NoSuchDataException(pid, false);
 		}
 	}
